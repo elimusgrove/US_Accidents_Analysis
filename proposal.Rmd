@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ### Link: https://www.kaggle.com/sobhanmoosavi/us-accidents
 
 ### Overview:
-  - 
+  - US accident dataset collected from 2016 to December 2019. The dataset has 49 columns and over 3 million rows. It also includes columns to indicate nearby features such as pedestrian crossing, junctions, exits, etc... It also includes the latitude and longitude of the crash, city, zip code, and weather information.
   
 ### Plan:
   - What type of weather has the biggest effect on accidents in general?
@@ -18,4 +18,3 @@ knitr::opts_chunk$set(echo = TRUE)
   - Which areas in Ames are the most dangerous for accidents? Des Moines?
   - How does bad weather impact accidents in Ames vs. Des Moines?
   - Which times of the year are highly correlated with accidents?
-  - 
