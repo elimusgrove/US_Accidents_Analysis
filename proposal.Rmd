@@ -1,10 +1,21 @@
 ---
-title: "proposal.Rmd"
+title: "US Accidents Analysis Proposal"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+### Group Members: Eli Musgrove, Tanner Boyle, Hunter Rose, Aaron Jencks
+### Link: https://www.kaggle.com/sobhanmoosavi/us-accidents
 
-
+### Overview:
+  - 
+  
+### Plan:
+  - What type of weather has the biggest effect on accidents in general?
+  - How do the causes of accidents differ between Ames and Des Moines taking population into account?
+  - Which areas in Ames are the most dangerous for accidents? Des Moines?
+  - How does bad weather impact accidents in Ames vs. Des Moines?
+  - Which times of the year are highly correlated with accidents?
+  - 
