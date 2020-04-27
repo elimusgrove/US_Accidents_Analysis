@@ -7,7 +7,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 ### Group Members: Eli Musgrove, Tanner Boyle, Hunter Rose, Aaron Jencks
-### Link: https://www.kaggle.com/sobhanmoosavi/us-accidents
+### Links: https://public-iowadot.opendata.arcgis.com/datasets/crash-data-1/data, https://public-iowadot.opendata.arcgis.com/datasets/crash-vehicle-data/data
 
 ### Overview:
   - US accident dataset collected from 2016 to December 2019. The dataset has 49 columns and over 3 million rows. It also includes columns to indicate nearby features such as pedestrian crossing, junctions, exits, etc... It also includes the latitude and longitude of the crash, city, zip code, and weather information.
