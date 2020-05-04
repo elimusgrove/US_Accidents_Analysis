@@ -307,7 +307,7 @@ head(unique(streets$LITERAL), 10)
 topstreets = streets %>% 
   distinct(total, .keep_all=TRUE) %>% 
   distinct(LITERAL, .keep_all=TRUE) %>% 
-  filter(LITERAL %in% head(LITERAL, 10))
+  filter(LITERAL %in% head(LITERAL, 5))
 topstreets %>% ggplot(aes(x=X, y=Y, label=LITERAL)) + 
   geom_point(data=crash_data, aes(x=X, y=Y), show.legend=FALSE) + 
   geom_point(aes(color=count), size=10) + geom_text_repel(aes(color=count, fill='white', fontface='bold'), size=8, box.padding=2, show.legend=FALSE) +
@@ -338,3 +338,24 @@ crash_vehicle_data$SPEEDLIMIT = ordered(crash_vehicle_data$SPEEDLIMIT, levels=c(
 crash_vehicle_data = crash_vehicle_data %>% rename('Surface Conditions' = CSURFCOND)
 crash_vehicle_data %>% ggplot(aes(x=SPEEDLIMIT, fill=`Surface Conditions`, position='fill')) + geom_bar() + ggtitle('Speed Limit for Conditions') + xlab('Speed Limit (mph)') + ylab('Number of Accidents')
 dev.off()
+
+# Libraries
+library(ggmap)
+library(sf)
+library(osmdata)
+
+# Replace labels
+topstreets <- topstreets %>% 
+  mutate(LITERAL = case_when(
+           str_detect(LITERAL, "US 69/S DUFF AVE & S 16TH ST & SE 16TH ST") ~ "DUFF AVE & S 16TH ST",
+           str_detect(LITERAL, "US 69/S DUFF AVE/LINCOLN WAY") ~ "DUFF AVE & LINCOLN WAY",
+           str_detect(LITERAL, "US 69/LINCOLN WAY/GRAND AVE") ~ "LINCOLN WAY & GRAND AVE",
+           TRUE ~ LITERAL))
+
+# Get Ames data
+cr_city_map <- get_map(getbb("Ames, Iowa"))
+png('./ames_worse_streets.png', width = 960, height = 540)
+ggmap(cr_city_map) +
+  geom_point(data=topstreets, aes(x=X, y=Y, color=count), size=5) +
+  scale_color_gradient(low='blue', high='red') +
+  geom_text_repel(data=topstreets, aes(x=X, y=Y, label=LITERAL), segment.colour = 'black', fontface='bold', force=5) + ggtitle('Most Dangerous Intersections') + xlab('Longitude') + ylab('Latitude')
