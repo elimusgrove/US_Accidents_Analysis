@@ -1,0 +1,434 @@
+---
+title: Cedar Rapids Data Representation
+author: Tanner Boyle
+date: 5/02/2020
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(lubridate)
+library(RColorBrewer)
+library(forcats)
+library(choroplethr)
+library(choroplethrMaps)
+library(ggrepel)
+library(osmdata)
+library(sf)
+library(ggmap)
+```
+
+```{r, run=FALSE}
+crd <- read.csv('./Crash_Data.csv')
+cvd <- read.csv('./Crash_Vehicle_Data.csv')
+cr <- crd %>% 
+    filter(COUNTY_NUMBER == 57)
+cvd <- cvd %>% 
+    filter(CASENUMBER %in% unique(cr$CASENUMBER))
+write.csv(cr, file='./Cedar_Rapids_Data.csv')
+write.csv(cvd, file='./Cedar_Rapids_Vehicle_Data.csv')
+```
+
+## Crash Data Cleaning
+
+```{r}
+png('./cr_harmful_event_bar.png', width = 1920, height = 1080)
+cr <- read.csv('./Cedar_Rapids_Data.csv')
+
+# Select Useful COlumns
+cr_crash <- cr %>% 
+    select(`ï..X`, Y, OBJECTID, CRASH_KEY, CASENUMBER, CRASH_DATE, CRASH_MONTH, CRASH_DAY, TIMESTR, LITERAL, FRSTHARM,
+           CRCOMNNR, MAJCSE, DRUGALC, ECNTCRC, CSRFCND, RCNTCRC, RDTYP, CSEV, FATALITIES, INJURIES, MAJINJURY, 
+           MININJURY, POSSINJURY, PROPDMG, VEHICLES, TOCCUPANTS)
+
+# Fix some datatypes
+cr_crash <- cr_crash %>% 
+    mutate(CRASH_DATE = as_datetime(as.character(CRASH_DATE)),
+        DRUGALC = factor(DRUGALC, levels=rev(c('None Indicated', 'Refused', 
+            'Alcohol (<Statutory)', 'Drug/Alcohol (< Statutory)', 
+            'Drug', 
+            'Alcohol (Statutory)', 'Drug/Alcohol (Statutory)', 
+            'Under Influence of Alcohol/Drugs/Medications'))))
+
+# Update colnames to be more descriptive
+cr_crash <- cr_crash %>% 
+    rename(X.coord = `ï..X`,
+           Y.coord = Y,
+           CRASH_TIME = TIMESTR,
+           Intersection = LITERAL,
+           First_Harmful_Event = FRSTHARM,
+           Crash_Direction = CRCOMNNR,
+           Cause = MAJCSE,
+           Drug_Alcohol = DRUGALC,
+           Environ_Impact = ECNTCRC,
+           Surface_Condition = CSRFCND,
+           Road_Impact = RCNTCRC,
+           Accident_Location = RDTYP,
+           Crash_Severity = CSEV,
+           Num_Occupants = TOCCUPANTS)
+
+str(cr_crash)
+
+levels(cr_crash$First_Harmful_Event)
+
+# Filter Crash Descriptions down to a manageable number
+cr_crash <- cr_crash %>% 
+    mutate(First_Harmful_Event = as.character(First_Harmful_Event),
+        First_Harmful_Event = case_when(
+        str_detect(First_Harmful_Event, "Collision with fixed object") ~ "Collision with fixed object",
+        str_detect(First_Harmful_Event, "Collision with:  Parked motor vehicle") ~ "Collision with fixed object",
+        str_detect(First_Harmful_Event, "Collision with:  Vehicle in traffic") ~ "Collision with Vehicle in traffic",
+        str_detect(First_Harmful_Event, "Other") ~ "Other",
+        str_detect(First_Harmful_Event, "Miscellaneous events") ~ "Other",
+        str_detect(First_Harmful_Event, "Non-collision events") ~ "Other",
+        str_detect(First_Harmful_Event, "Not Reported") ~ "NA",
+        str_detect(First_Harmful_Event, "Unknown") ~ "NA",
+        str_detect(First_Harmful_Event, "Animal") ~ "Collision with Animal",
+        str_detect(First_Harmful_Event, "Unknown") ~ "NA",
+        str_detect(First_Harmful_Event, "1") ~ "Other",
+        str_detect(First_Harmful_Event, "2") ~ "Other",
+        str_detect(First_Harmful_Event, "3") ~ "Other",
+        str_detect(First_Harmful_Event, "5") ~ "Other",
+        str_detect(First_Harmful_Event, "6") ~ "Other",
+        str_detect(First_Harmful_Event, "9") ~ "Other",
+        str_detect(First_Harmful_Event, "Railway vehicle") ~ "Collision with fixed object",
+        str_detect(First_Harmful_Event, "Work zone") ~ "Collision with fixed object",
+        str_detect(First_Harmful_Event, "Non-motorist") ~ "Other",
+        str_detect(First_Harmful_Event, "Struck/struck") ~ "Other",
+        str_detect(First_Harmful_Event, "Thrown") ~ "Other",
+        str_detect(First_Harmful_Event, "Re-enter") ~ "Collision when Re-entering Roadway",
+        TRUE ~ First_Harmful_Event))
+
+cr_crash %>%
+    filter(First_Harmful_Event != "NA") %>% 
+    group_by(First_Harmful_Event) %>% 
+    summarise(n = n()) %>% 
+    ggplot(aes(x=reorder(First_Harmful_Event, -n), y=n)) +
+    geom_bar(stat='identity') +
+    coord_flip() +
+    labs(x = "First Harmful Event",
+         y = "Number of Collisions",
+         title = "Major Harmful Events by Number of Occurences")
+
+dev.off()
+```
+
+### As we can see, the most prevalent type of collision would be between 2 or more vehicles in traffic, followed by collision with a fixed object (fire hydrant, tree, etc), and finally collisions with animals. Next, it would be interesting to see if certain types of collisions would be more prevalent in certain parts of Cedar Rapids.
+
+```{r}
+png('./cr_harmful_event_map.png', width = 1920, height = 1080)
+cr_crash <- cr_crash %>% 
+    filter(between(cr_crash$X.coord, -92.5, -90.75))
+
+cr_map <- get_map(c(left = -91.9, bottom = 41.8, right = -91.3, top = 42.3))
+
+ggmap(cr_map) +
+    geom_point(data=cr_crash %>% 
+    filter(First_Harmful_Event != "NA",
+           First_Harmful_Event != "Other"), aes(x=X.coord, y=Y.coord, color=First_Harmful_Event)) +
+    scale_color_manual(values=c("#e6550d", "#2c7fb8", "#7fcdbb", "#edf8b1")) +
+    labs(title="Map of First Harmful Events in Collisions in Linn County")
+dev.off()
+```
+
+### The above map paints a picture that most people probably could've expected. Collisions with 2+ vehicles in traffic are much more prevalent in the downtown area and collisions with animals are much more prevalent on county roads. Collisions with fixed objects appear to be pretty evenly distributed between downtown and county roads. 
+
+# Next, I am curious to look at number of collisions based off of day of week and find out if there are any major discrepancies on when crashes occur.
+
+```{r}
+png('./cr_collisions_day.png', width = 1920, height = 1080)
+
+# Fix some dates
+cr_crash <- cr_crash %>% 
+    separate(CRASH_DATE, c('year', 'month', 'day')) %>% 
+        select(-month) %>% 
+        mutate(year = as.numeric(year), day = as.numeric(day)) %>%
+    separate(CRASH_TIME, c('hour', 'minute')) %>% 
+        mutate(hour = as.numeric(hour), minute = as.numeric(minute))
+
+cr_crash %>% 
+    group_by(CRASH_DAY) %>% 
+    summarise(n=n()) %>% 
+    ggplot(aes(x=reorder(CRASH_DAY, -n), y=n)) +
+    geom_bar(stat='identity') +
+    labs(x = "Day of the Week",
+         y = "Number of Collisions",
+         title = "Number of Collisions by Day of Week")
+dev.off()
+```
+
+### Looks like Friday is the major day for crashes and Sunday is the clear safest day for car accidents. I think that this is explainable as people are out and about Fridays and typically stay at home and relax on Sundays. I wonder if there is an seasonality to this data.
+
+# Look at seasonality of crashes throughout years followed in the dataset 
+
+```{r}
+png('./cr_collisions_seasonal.png', width = 1920, height = 1080)
+cr_crash %>% 
+    group_by(year, CRASH_MONTH) %>% 
+    summarise(n=n()) %>% 
+    arrange(-n)
+
+cr_crash %>% 
+    filter(year != 2020,
+           year >= 2011) %>% 
+    mutate(year=as.factor(year),
+           CRASH_MONTH = factor(CRASH_MONTH, levels=c("January", "February", "March", "April", "May",
+                                        "June", "July", "August", "September", "October",
+                                        "November", "December"))) %>% 
+    group_by(year, CRASH_MONTH) %>% 
+    summarise(n=n()) %>% 
+    ggplot(aes(x=CRASH_MONTH, y=n, group=year, color=year, label=n)) +
+    geom_line() +
+    geom_text(aes(label=ifelse(n>350, as.character(year), ""), hjust=0, vjust=0)) +
+    geom_text(aes(label=ifelse(n<215, as.character(year), ""), hjust=0, vjust=0)) +
+    labs(x = "Month of the Year",
+         y = "Number of Collisions",
+         title = "Number of Collisions by Month of the Year, grouped by Year") +
+    scale_color_brewer(type='div', palette=2)
+    
+dev.off()
+```
+
+### Our intuition was correct -- there is pretty heavy seasonality with the number of car accidents throughout the years. The winter months (November-February) are clearly the peak dangerous season while a local maximum occurs during summer (May-July). It will be interesting to look at the major causes of accidents in winter months and determine if the winter weather is actually causing more accidents.
+
+### Another thing to investigate would be that, looking at some of the top/bottom years, it paints a picture that car crashes might be more prevalent lately than they used to be. All of the top years are >= 2017 and all of the bottom years are =< 2012. However, this could just be a function of greater population and couldn't be proven without information on the number of drivers in the county.
+
+# We will first investigate the impact of weather on car crashes. 
+
+```{r}
+cr_crash %>% 
+    group_by(Environ_Impact) %>% 
+    summarise(n=n()) %>% 
+    arrange(-n)
+```
+
+### Doesn't look like many accidents were directly linked to Weather Conditions. Perhaps we should look at most prevalent surface conditions in crashes to determine whether or not weather was at all a factor (instead of the main contributing factor only).
+
+```{r}
+cr_crash %>% 
+    group_by(Surface_Condition) %>% 
+    summarise(n=n()) %>% 
+    arrange(-n)
+```
+
+### Looking at the above frequency tables, it doesn't look like surface/weather conditions played an enormous role in the frequency of car crashes in Linn County over the last ~11 years. Just to make sure, I want to filter the dataset
+
+```{r}
+png('./cr_collisions_dry.png', width = 1920, height = 1080)
+    
+ggmap(cr_map) +
+    geom_point(data=cr_crash %>%
+                        mutate(year=as.factor(year),
+                            CRASH_MONTH = factor(CRASH_MONTH, levels=c("January", "February", "March", "April", "May",
+                                        "June", "July", "August", "September", "October",
+                                        "November", "December"))) %>%
+                            filter(CRASH_MONTH %in% c("November", "December", "January", "February")) %>% 
+                            filter(Surface_Condition != "Not Reported",
+                                Surface_Condition != "Unknown",
+                                Surface_Condition != "Other (explain in narrative)",
+                                Surface_Condition != "Mud, dirt",
+                                Surface_Condition != "Gravel") %>% 
+                            mutate(dry_ind = ifelse(Surface_Condition == "Dry", "Dry", "Not Dry")), 
+                aes(x=X.coord, y=Y.coord, color=dry_ind)) +
+    scale_color_brewer(palette="Dark2") +
+    labs(title="Map of Collisions in Linn County separated by Road Condition",
+         color = "Road Condition")
+dev.off()
+```
+
+### Looking at the frequency table and plot above, I don't think that surface condition typically played a role in car collisions. The number of collisions on dry and non-dry roads are nearly equal through the length of our dataset. From the plot of Cedar Rapids, it looks like non-dry surface conditions might've played a bigger role on county roads and rural highways and that the majority of accidents downtown occured in Dry conditions. Knowing this, we can only speculate why the winter months might have higher collision rates.
+
+### Lets look at how the crashes are distributed throughout the county through the years.
+
+```{r}
+png('./cr_collisions_by_year.png', width = 1920, height = 1080)
+ggmap(cr_map) +
+    geom_point(data=cr_crash %>% 
+                        filter(year >= 2012) %>% 
+                        mutate(year = as.factor(year)) %>% 
+                        group_by(year) , aes(x=X.coord, y=Y.coord, color=year)) +
+    scale_color_brewer(palette="YlOrBr") +
+    labs(title="Map of Collisions in Linn County by Year",
+         color = "Year")
+dev.off()
+```
+
+### While this might not be a high confidence linear model, it appears like more recent collisions are occuring downtown with a higher frequency than years past. This could be somewhat related to many efforts by Cedar Rapids to revitalize their downtown area and draw in more people. 
+
+# Next, I decided to look at the types of impacts that occurred and try to determine what drivers were most at risk for. As a side, I was curious which crashes typically led to the greatest monetary loss.
+
+```{r}
+png('./cr_crash_direction.png', width = 1920, height = 1080)
+levels(cr_crash$Crash_Direction)
+
+cr_crash <- cr_crash %>% 
+    mutate(Crash_Direction = as.character(Crash_Direction),
+        Crash_Direction = case_when(
+        str_detect(Crash_Direction, "Head-on") ~ "Head-on",
+        str_detect(Crash_Direction, "Broadside") ~ "Front to Side",
+        str_detect(Crash_Direction, "oncoming left turn") ~ "Front to Side",
+        str_detect(Crash_Direction, "Rear-end") ~ "Rear-end",
+        str_detect(Crash_Direction, "Sideswipe") ~ "Side to Side",
+        str_detect(Crash_Direction, "Non-collision") ~ "Non-collision",
+        str_detect(Crash_Direction, "Broadside") ~ "Front to Side",
+        str_detect(Crash_Direction, "Rear to rear") ~ "Other/NA",
+        str_detect(Crash_Direction, "Rear to side") ~ "Other/NA",
+        str_detect(Crash_Direction, "Other") ~ "Other/NA",
+        str_detect(Crash_Direction, "Unknown") ~ "Other/NA",
+        str_detect(Crash_Direction, "Not Reported") ~ "Other/NA",
+        TRUE ~ Crash_Direction))
+
+cr_crash %>% 
+    filter(Crash_Direction != "Other/NA") %>%
+    group_by(Crash_Direction) %>% 
+    summarise(n=n(),
+              mean_damage = mean(PROPDMG),
+              med_damage = median(PROPDMG)) %>% 
+    arrange(-mean_damage)
+
+
+cr_crash %>% 
+    filter(Crash_Direction != "Other/NA",
+           PROPDMG < 50000) %>% 
+    ggplot(aes(x=reorder(Crash_Direction, PROPDMG, FUN = median), y=PROPDMG)) +
+               geom_boxplot() +
+    coord_flip() +
+    labs(title="Average Property Damage Based off of Type of Collision",
+         x = "Type of Collision",
+         y = "Distribution of Property Damage")
+dev.off()
+```
+
+### As we might've expected, head-on collisions have the highest distribution of property damage. Interestingly, the middle 50% has the greatest amount of variation, but it has many less outliers than the other types of collisions. This could mean that While the average collision may vary a good amount, there are less extreme cases than other types of collisions. Non-collisions are typically the smallest monetary damage (think driving into a ditch, swerving and flipping the vehicle, etc) but there are a lot of outliers, meaning that there is a great range of damage that can happen during one of these events. 
+
+### I wonder if we can paint the most at-risk areas of Cedar Rapids using the figures. 
+
+```{r}
+png('./cr_collision_types.png', width = 1920, height = 1080)
+ggmap(cr_map) +
+    geom_point(data=cr_crash %>%
+                        filter(Crash_Direction != "Other/NA") %>% 
+                        group_by(Crash_Direction), 
+               aes(x=X.coord, y=Y.coord, colour=Crash_Direction)) +
+    scale_color_brewer(palette="RdYlGn") +
+    labs(title = "Map of Collision Types throughout Linn County")
+dev.off()
+```
+
+### Predictably, the greatest concentration of collisions occurred downtown; this is mostly comprised of Rear End, Front to Side, and Side to Side. For anyone who knows Cedar Rapids, it makes sense that there are a lot of Front to Side and Side to Side collisions because a number of the streets are one-ways; this decreases the chances of head-on collisions. Also predictably, the greatest concentration of non-collisions occur on the county roads and rural highways outside the actual city.
+
+
+```{r, include=FALSE}
+png('./cr_alcohol.png', width = 1920, height = 1080)
+levels(cr_crash$Drug_Alcohol)
+counts <- cr_crash %>% 
+    group_by(year) %>% 
+    summarize(counts = n())
+
+master <- left_join(cr_crash, counts, by='year') 
+master %>% 
+    ggplot(aes(x=year, y=counts, fill=Drug_Alcohol)) + 
+    geom_bar(stat='identity') + 
+    scale_fill_brewer(palette = 'RdYlBu')
+
+film <- master %>% 
+    filter(Drug_Alcohol != 'None Indicated')
+
+film %>% 
+    ggplot(aes(x=year, y=counts, fill=Drug_Alcohol)) + 
+    geom_bar(stat='identity') + 
+    scale_fill_brewer(palette = 'RdYlBu')
+dev.off()
+```
+
+
+
+```{r, include=FALSE}
+png('./cr_alcohol_filtered.png', width = 1920, height = 1080)
+levels(film$Drug_Alcohol)[levels(film$Drug_Alcohol) == 'Drug/Alcohol (Statutory)' | levels(film$Drug_Alcohol) == 'Drug' | levels(film$Drug_Alcohol) == 'Drug/Alcohol (< Statutory)'] = 'Under Influence of Alcohol/Drugs/Medications'
+# levels(film$Drug_Alcohol) = c('Under Influence of Alcohol/Drugs/Medications', 'Alcohol (Statutory)', 'Refused', 'None Indicated')
+film %>% 
+    ggplot(aes(x=year, y=counts, fill=Drug_Alcohol)) + 
+    geom_bar(stat='identity') + 
+    scale_fill_brewer(palette = 'RdYlBu')
+
+levels(cr_crash$Drug_Alcohol)[levels(cr_crash$Drug_Alcohol) == 'Drug/Alcohol (Statutory)' | levels(cr_crash$Drug_Alcohol) == 'Drug' | levels(cr_crash$Drug_Alcohol) == 'Drug/Alcohol (< Statutory)'] = 'Under Influence of Alcohol/Drugs/Medications'
+dev.off()
+```
+
+### Distribution of drug/alcohol usage
+
+```{r, include=FALSE}
+png('./cr_alcohol_map.png', width = 1920, height = 1080)
+ggmap(cr_map) +
+    geom_point(data=cr_crash %>% 
+                   filter(Drug_Alcohol != 'None Indicated'),
+               aes(x=X.coord, y=Y.coord, color=Drug_Alcohol)) +
+    scale_color_brewer(palette='Set1') +
+    labs(title = "Map of Drug/Alcohol-Related Collisions in Linn County",
+         color = "Drug/Alcohol Status")
+dev.off()
+```
+
+This shows that there really isn't a specific bias towards drug/alcohol usage with respect to location, it's pretty evenly distributed. Though, it can be seen that more people refuse tests on the Highway (up/down)
+
+### Most Dangerous Intersections
+
+```{r, include=FALSE}
+png('./cr_dangerous_intersection.png', width = 1920, height = 1080)
+
+streets <- cr_crash %>% 
+    mutate(total=X.coord*X.coord+Y.coord*Y.coord)
+
+scnt <- streets %>% 
+    group_by(total) %>% 
+    summarize(count = n())
+    
+streets <- streets %>% 
+    left_join(scnt, by='total') %>% 
+    arrange(desc(count))
+
+str(streets %>% 
+        distinct(Intersection, .keep_all=TRUE))
+head(unique(streets$Intersection), 10)
+
+topstreets <- streets %>% 
+    distinct(total, .keep_all=TRUE) %>% 
+    distinct(Intersection, .keep_all=TRUE) %>% 
+    filter(Intersection %in% head(Intersection, 10))
+
+topstreets <- topstreets %>% 
+    mutate(Intersection = as.character(Intersection),
+        Intersection = case_when(
+        str_detect(Intersection, "WILSON") ~ "WILSON & EDGEWOOD",
+        str_detect(Intersection, "I-380 & BL") ~ "I380 & BLAIRS FERRY",
+        str_detect(Intersection, "16TH") ~ "16TH AVE & EDGEWOOD",
+        str_detect(Intersection, "I-380 & IA") ~ "I380 & 1ST AVE",
+        str_detect(Intersection, "CENTER POINT") ~ "BLAIRS FERRY & CENTER PT",
+        str_detect(Intersection, "NORTHLAND") ~ "COLLINS & NORTHLAND",
+        str_detect(Intersection, "C AVE") ~ "COLLINS & C AVE",
+        str_detect(Intersection, "DUBUQUE") ~ "US151 & 10TH AVE",
+        str_detect(Intersection, "10TH ST") ~ "1ST AVE & 10TH ST",
+        str_detect(Intersection, "COUNCIL") ~ "BLAIRS FERRY & COUNCIL",
+        TRUE ~ Intersection))
+
+cr_city_map <- get_map(getbb("Cedar Rapids"))
+
+ggmap(cr_city_map) +
+    geom_point(data=topstreets, aes(x=X.coord, y=Y.coord, color=count), size=5) +
+    scale_color_gradient(low='yellow', high='red') +
+    xlim(-91.74, -91.53) +
+    ylim(41.93, 42.05) +
+    geom_label_repel(data=topstreets, aes(x=X.coord, y=Y.coord, label=Intersection), 
+              box.padding = 0.35,
+              point.padding = 0.5,
+              segment.colour = 'black')
+    
+dev.off()
+```
+
