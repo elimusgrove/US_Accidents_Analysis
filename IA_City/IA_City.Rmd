@@ -13,6 +13,9 @@ library(tidyr)
 library(stringr)
 library(lubridate)
 library(RColorBrewer)
+library(ggmap)
+library(sf)
+library(osmdata)
 
 crash_data = read.csv('./ia_city_data.csv')
 crash_vehicle_data = read.csv('./ia_city_vehicle_data.csv')
@@ -465,7 +468,8 @@ topstreets = streets %>%
     distinct(LITERAL, .keep_all=TRUE) %>% 
     filter(LITERAL %in% head(LITERAL, 10))
 
-topstreets %>% ggplot(aes(x=X, y=Y, label=LITERAL)) + 
+iac_city_map = get_map(getbb("Iowa City"))
+ggmap(iac_city_map) + ggplot(.data=topstreets, aes(x=X, y=Y, label=LITERAL)) + 
     geom_point(data=crash_data, aes(x=X, y=Y), show.legend=FALSE) + 
     geom_point(aes(color=count), size=10) + geom_text_repel(aes(color=count), size=8, nudge_y=-0.1, nudge_x=-0.2, label.padding=2, box.padding=2, show.legend=FALSE) +
     scale_color_gradient(low='blue', high='red')
