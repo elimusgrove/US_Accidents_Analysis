@@ -362,7 +362,17 @@ And it would seem that the DOT may have been doing away with having separate typ
 ```{r}
 levels(film$DRUGALC)[levels(film$DRUGALC) == 'Drug/Alcohol (Statutory)' | levels(film$DRUGALC) == 'Drug' | levels(film$DRUGALC) == 'Drug/Alcohol (< Statutory)'] = 'Under Influence of Alcohol/Drugs/Medications'
 # levels(film$DRUGALC) = c('Under Influence of Alcohol/Drugs/Medications', 'Alcohol (Statutory)', 'Refused', 'None Indicated')
+
+tcounts = film %>% group_by(year, DRUGALC) %>% summarize(tcount=n())
+film = left_join(film, tcounts, by=c('year', 'DRUGALC')) %>% mutate(tperc = tcount/counts*100)
+
 film %>% ggplot(aes(x=year, y=counts, fill=DRUGALC)) + geom_bar(stat='identity') + scale_fill_brewer(palette = 'RdYlBu')
+film %>% ggplot(aes(x=DRUGALC, y=tcount, fill=DRUGALC, label=round(tperc, digits=3))) + 
+    facet_wrap(~year) + 
+    geom_bar(stat='identity', position='dodge') + scale_fill_brewer(palette='RdYlBu') + 
+    geom_text(aes(y=tcount / 2), nudge_y=20, color='black', srt=90, size=3) +
+    theme(axis.text.y = element_blank(), axis.text.x = element_blank(), axis.ticks = element_blank()) + 
+    labs(y='Incident count (%)', title='Drug/Alcohol distribution by year')
 
 levels(crash_data$DRUGALC)[levels(crash_data$DRUGALC) == 'Drug/Alcohol (Statutory)' | levels(crash_data$DRUGALC) == 'Drug' | levels(crash_data$DRUGALC) == 'Drug/Alcohol (< Statutory)'] = 'Under Influence of Alcohol/Drugs/Medications'
 ```
