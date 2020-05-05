@@ -468,12 +468,14 @@ topstreets = streets %>%
     distinct(LITERAL, .keep_all=TRUE) %>% 
     filter(LITERAL %in% head(LITERAL, 10))
 
-iac_city_map = get_map(getbb("Iowa City"))
-ggmap(iac_city_map) + ggplot(.data=topstreets, aes(x=X, y=Y, label=LITERAL)) + 
-    geom_point(data=crash_data, aes(x=X, y=Y), show.legend=FALSE) + 
-    geom_point(aes(color=count), size=10) + geom_text_repel(aes(color=count), size=8, nudge_y=-0.1, nudge_x=-0.2, label.padding=2, box.padding=2, show.legend=FALSE) +
+# X > -91.9 & X < -91.45 & Y < 41.875 & Y > 41.4
+iac_city_map = get_map(left=-91.9, bottom=41.8, right=-91.3, top=42.3)
+danger = ggmap(iac_city_map) +
+    geom_point(data=topstreets, aes(x=X, y=Y, color=count), size=10) + 
+    geom_text_repel(data=topstreets, aes(label=LITERAL, color=count), size=8, nudge_y=-0.1, nudge_x=-0.2, label.padding=2, box.padding=2, show.legend=FALSE) +
     scale_color_gradient(low='blue', high='red')
     
+print(danger)
 dev.off()
 ```
 ![street analysis](./county_vehicle_plot_street.png)
